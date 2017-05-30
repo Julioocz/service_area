@@ -1,5 +1,6 @@
 import logging
 
+from django.views.decorators.cache import cache_page
 from django.contrib.gis.geos import Point
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view
@@ -50,6 +51,7 @@ class ServiceAreaViewSet(viewsets.ModelViewSet):
         serializer.save(provider_id=self.kwargs['provider_pk'])
 
 
+@cache_page(60 * 5)
 @api_view(['GET'])
 def search_service_areas(request):
     """
