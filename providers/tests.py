@@ -1,96 +1,307 @@
+from django.contrib.gis.geos import Polygon, Point
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from faker import Faker
 
-from providers.models import Provider
-from . import factories, serializers
+from . import factories, serializers, models
 
 
-class ProviderCreateTest(APITestCase):
+class CreateViewTest:
     """
-    Test class for testing the creation of a provider
+    Simple base class for a create view test. The child classes must set the class attributes url_reverse_name,
+    factory_class, model and serializer_class
+    
+    (class is defined as a protected class to avoid running it with the test runner)
+    
+    #### This class is an abstract
     """
+    url = ''
+    factory_class = None
+    serializer_class = None
+    model = None
 
-    def test_create_provider(self):
+    def get_url(self):
+        pass
+
+    def test_create(self):
         """
-        Ensure that a provider is created on a post request
+        Ensures that a record is created on a post request
         """
-        url = reverse('provider-list')
-        provider = factories.ProviderFactory.build()
-        serializer = serializers.ProviderSerializer(provider)
+        url = self.url
+        instance = self.factory_class.build()
+        serializer = self.serializer_class(instance)
+
         response = self.client.post(url, serializer.data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(Provider.objects.count(), 1)
-
-        # Checks that the response has the info about the provider. The response data id on the data is changed to None
-        # To allow comparison with the serializer (it doesn't have an id)
-        response.data['id'] = None
-        self.assertEqual(response.data, serializer.data)
+        self.assertEqual(self.model.objects.count(), 1)
 
 
-class ProviderViewSetTest(APITestCase):
+class ProviderCreateViewTest(CreateViewTest, APITestCase):
     """
-    Test class to test the Provider view set (without creation)
+    Tests for the create view of the provider endpoint
     """
+    url = reverse('provider-list')
+    factory_class = factories.ProviderFactory
+    serializer_class = serializers.ProviderSerializer
+    model = models.Provider
 
-    def __init__(self, *args, **kwargs):
-        self.fake = Faker()
-        super().__init__(*args, **kwargs)
+
+class ServiceAreaCreateViewTest(CreateViewTest, APITestCase):
+    """
+    Test for the create view of the provider endpoint
+    """
+    factory_class = factories.ServiceAreaFactory
+    serializer_class = serializers.ServiceAreaSerializer
+    model = models.ServiceArea
 
     def setUp(self):
-        self.provider = factories.ProviderFactory.create()
-        self.serializer = serializers.ProviderSerializer(self.provider)
+        provider = factories.ProviderFactory.create()
+        self.url = reverse('provider-service-area-list', kwargs={'provider_pk': provider.id})
 
-    def test_provider_list(self):
+
+class ViewSetTest:
+    """
+    Viewset test mixing for testing the list, detail, update, partial update and delete view from a viewset.
+    """
+    fake = Faker()
+
+    # Used for generating the endpoint url
+    reverse_url_prefix = None
+
+    # This arguments are passed to the reverse function to generate the endpoint url
+    reverse_kwargs = None
+    factory_class = None
+    model = None
+    queryset = None
+    serializer_class = None
+
+    # Several of the tests require a model instance and a serializer. They are set in the setUp method
+    instance = None
+    serializer = None
+
+    # Used to make the instances in the list view test
+    list_view_build_kwargs = {}
+
+    def setUp(self):
+        self.instance = self.factory_class.create()
+        self.serializer = self.serializer_class(self.instance)
+
+    def get_queryset(self):
+        return self.queryset
+
+    def _generate_url(self, postfix, **kwargs):
         """
-        Test the list view for the providers
+        Generates the api url using the django reverse util function. Using the class reverse url prefix, the provided
+        postfix and the kwargs.
+        
+        The kwargs that are provided are merged with the class reverse_kwargs. Taking precedence the
+        provided kwargs. If any key is repeated, the one in kwargs are the ones that are added to
+        the reverse function
+        
+        :param postfix: the string to be added after the prefix and a `-` symbol for the reverse url.
+        (f'{prefix}-{postfix}' 
+        :param kwargs: arguments to be added to the to the class reverse kwargs for the reverse function
+        kwargs argument. If there is a conflict in the keys the provided kwargs item will overwrite the
+        one in the class reverse kwargs
+        :return: an url generated from the provided data.
+        """
+        new_kwargs = dict(self.reverse_kwargs, **kwargs) if self.reverse_kwargs else kwargs
+        return reverse(f'{self.reverse_url_prefix}-{postfix}', kwargs=new_kwargs)
+
+    def test_list_view(self):
+        """
+        Tests the list view of the viewset that is being tested by sub classes. It creates a few
+        records and tests if all of them are shown on the api response.
         """
         # Creating a few providers
-        instances = [factories.ProviderFactory.build() for _ in range(20)]
-        Provider.objects.bulk_create(instances)
+        instances = [self.factory_class.build(**self.list_view_build_kwargs) for _ in range(20)]
+        self.model.objects.bulk_create(instances)
 
         # Making the request
-        url = reverse('provider-list')
+        url = self._generate_url('list')
         response = self.client.get(url)
-        self.assertEqual(len(response.data), Provider.objects.count())
 
-        for provider, provider_instance in zip(response.data, Provider.objects.all()):
-            serializer = serializers.ProviderSerializer(provider_instance)
-            self.assertEqual(provider, serializer.data)
+        self.assertEqual(len(response.data), self.get_queryset().count())
+        for response_instance, model_instance in zip(response.data, self.get_queryset()):
+            serializer = self.serializer_class(model_instance)
+            self.assertEqual(response_instance, serializer.data)
 
-    def test_provider_detail(self):
+    def test_detail(self):
         """
-        Tests the detail data for a provider
+        Tests the detail view of the viewset that is being tested by sub classes. It queries the detail
+        endpoint and checks if the data that's received is equal to the one generated by the class 
+        serializer (initialized by subclasses)
         """
-        url = reverse('provider-detail', kwargs={'pk': 1})
+        url = self._generate_url('detail', pk=self.instance.id)
         response = self.client.get(url)
         self.assertEqual(response.data, self.serializer.data)
 
-    def test_provider_update(self):
+    def test_update(self):
         """
-        Tests the update methods (partial and complete) for the providers
+        Tests the update (put method) of the viewset that is being tested by sub classes
         """
-        url = reverse('provider-detail', kwargs={'pk': 1})
-
-        # Partial update
-        new_name = self.fake.company()
-        response = self.client.patch(url, {'name': new_name}, format='json')
-        self.assertEqual(response.data['name'], new_name)
+        url = self._generate_url('detail', pk=self.instance.id)
 
         # Complete update
-        new_provider = factories.ProviderFactory.build()
-        serializer = serializers.ProviderSerializer(new_provider)
+        new_instance = self.factory_class.build()
+        serializer = self.serializer_class(new_instance)
         response = self.client.put(url, serializer.data, format='json')
 
-        response.data['id'] = None
-        self.assertEqual(response.data, serializer.data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_provider_delete(self):
+    def test_delete(self):
         """
-        Tests the delete method on the provider endpoint 
+        Tests the delete view of the viewset that is being tested by sub classes. It request a delete
+        for the setup instance id and checks the response code.
         """
-        url = reverse('provider-detail', kwargs={'pk': 1})
+        url = self._generate_url('detail', pk=self.instance.id)
         response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_partial_update(self, partial_update_dict):
+        """
+        Tests the partial update (patch method) of the viewset that is being tested by sub classes
+        """
+        url = self._generate_url('detail', pk=self.instance.id)
+        response = self.client.patch(url, partial_update_dict, format='json')
+        for key, value in partial_update_dict.items():
+            self.assertEqual(response.data[key], value)
+
+
+class ProviderViewSetTest(ViewSetTest, APITestCase):
+    """
+    Testing for the Provider viewset
+    """
+    fake = Faker()
+    reverse_url_prefix = 'provider'
+    factory_class = factories.ProviderFactory
+    serializer_class = serializers.ProviderSerializer
+    model = models.Provider
+    queryset = models.Provider.objects.all()
+
+    def test_partial_update(self):
+        partial_update_dict = {'name': self.fake.company()}
+        super().test_partial_update(partial_update_dict)
+
+
+class ServiceAreaViewSetTest(ViewSetTest, APITestCase):
+    """
+    Testing for the Service Area viewset
+    """
+    fake = Faker()
+    reverse_url_prefix = 'provider-service-area'
+    factory_class = factories.ServiceAreaFactory
+    serializer_class = serializers.ServiceAreaSerializer
+    model = models.ServiceArea
+
+    def setUp(self):
+        super().setUp()
+        self.reverse_kwargs = {'provider_pk': self.instance.provider_id}
+        self.list_view_build_kwargs = {'provider_id': self.instance.provider_id}
+
+    def get_queryset(self):
+        return models.ServiceArea.objects.filter(provider=self.instance.provider_id)
+
+    def test_partial_update(self):
+        partial_update_dict = {'name': self.fake.company()}
+        super().test_partial_update(partial_update_dict)
+
+
+class ServiceAreaSearchTest(APITestCase):
+    """
+    Tests the search endpoint for available service areas (and providers) for a lat,lon point. The test class
+    provides two service areas with different providers for running the tests. The areas have a square shape
+    and one contains the other (a big square and a small square)
+    
+    Service areas could be generated randomly in the future.
+     
+    The tests consist in checking the response when querying for different points the search endpoint.
+    """
+
+    url = reverse('search-service-areas')
+    max_side_length = 50.0
+    big_service_side_length = max_side_length
+    small_service_side_length = max_side_length / 2
+
+    def setUp(self):
+        """
+        Sets up the tests by creating two service areas.
+        """
+        # Creating service areas
+        # Two polygons are created. With one having half of the are than the other
+
+        # shortcuts
+        sl1 = self.big_service_side_length  # SIDE LENGTH 1
+        sl2 = self.small_service_side_length  # SIDE LENGTH 2
+
+        polygons = [
+            Polygon(((0.0, 0.0), (0.0, sl1), (sl1, sl1), (sl1, 0.0), (0.0, 0.0))),
+            Polygon(((0.0, 0.0), (0.0, sl2), (sl2, sl2), (sl2, 0.0), (0.0, 0.0)))
+        ]
+        self.areas = [factories.ServiceAreaFactory.create(area=polygon) for polygon in polygons]
+
+    def test_no_result(self):
+        """
+        Test the case where no provider was found in the point
+        """
+        lat_lon = self.max_side_length * 2
+        location = f'{lat_lon},{lat_lon}'
+        response = self.client.get(self.url, {'location': location})
+        self.assertEqual(len(response.data), 0)
+
+    def test_just_one_result(self):
+        """
+        Test that just one result is found (of the two existing areas) is found when the point is just contained
+        in one of the areas (polygons). For this the location is set to a point outside the inner square
+        """
+        # The point it's just a bit outside the inner square to avoid problems when changing the max_side_length
+        lat_lon = self.small_service_side_length + 0.001
+        location = f'{lat_lon}, {lat_lon}'
+        response = self.client.get(self.url, {'location': location})
+        self.assertEqual(len(response.data), 1)
+
+    def test_two_results(self):
+        """
+        Tests that the two service areas are found when querying with a location inside the inner square
+        """
+        lat_lon = self.small_service_side_length - 10
+        location = f'{lat_lon}, {lat_lon}'
+        response = self.client.get(self.url, {'location': location})
+        self.assertEqual(len(response.data), 2)
+
+    def test_bad_request_with_no_queryparams(self):
+        """
+        Tests that the api returns a bad status code and a message when no location queryparam is provided
+        """
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIsNotNone(response.data.get('message'))
+
+    def test_bad_request_with_bad_queryparams(self):
+        """
+        Test that the apí returns a bad status code and a message when the location is not formatted correctly
+        """
+        bad_locations = [
+            '100,a',
+            '123',
+            'ad:100'
+        ]
+        for bad_location in bad_locations:
+            response = self.client.get(self.url, {'location': bad_location})
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_good_response_with_good_queryparams(self):
+        """
+        tests that the api returns a good status code with good a formatted location
+        """
+        good_locations = [
+            '100.2,41',
+            '2,213.2',
+            '5.312,11.2',
+        ]
+
+        for good_location in good_locations:
+            response = self.client.get(self.url, {'location': good_location})
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
