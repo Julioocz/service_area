@@ -22,5 +22,5 @@ schema_view = get_swagger_view(title='Service Area API')
 urlpatterns = [
     url(r'^admin/', admin.site.urls),
     url(r'^', include('providers.urls')),
-    url(r'^docs/', schema_view),
+    url(r'^$', schema_view),
 ]

@@ -2,7 +2,9 @@
 This app consist in a rest API built with geodjango, django rest
 framework to allow service providers to set an area (a polygon) where
 they provide their services. The API has an endpoint that allows users
-to search for providers that contains a location (lat, lon).
+to search for providers that contains a location (lat, lon). You can 
+access to the app with this 
+[link](http://ec2-52-14-176-161.us-east-2.compute.amazonaws.com/)
 
 ## Caching.
 Right now the major problem with this API is the caching. At this moment

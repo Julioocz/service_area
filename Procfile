@@ -1,0 +1,1 @@
+web: gunicorn service_area.wsgi:application

@@ -55,7 +55,6 @@ class ServiceAreaViewSet(viewsets.ModelViewSet):
 @api_view(['GET'])
 def search_service_areas(request):
     """
-    Search
     Search endpoint for the service areas than contains a geometrical point (lat,lon).
     The geometrical point must be added to the request as a queryparam named location with the form (lat,lon)
     

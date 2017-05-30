@@ -10,14 +10,12 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/1.11/ref/settings/
 """
 
-import os
 import environ
 
 env = environ.Env()
-root = environ.Path(__file__) - 1
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
-BASE_DIR = root()
+BASE_DIR = environ.Path(__file__) - 1
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/1.11/howto/deployment/checklist/
@@ -28,7 +26,7 @@ SECRET_KEY = '3p69+dejwmf7=2y=x9+upo38v4j&*c4x7o&m!93pljo)+zp010'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [env('ALLOWED_HOST', default='localhost')]
 
 # Application definition
 
@@ -121,7 +119,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/1.11/howto/static-files/
 
 STATIC_URL = '/static/'
-
+STATIC_ROOT = str(BASE_DIR.path('staticfiles'))
 
 # CACHING
 # ----------------------------------------------------------------------------
@@ -135,3 +133,4 @@ CACHES = {
         }
     }
 }
+
