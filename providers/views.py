@@ -14,6 +14,13 @@ logger = logging.getLogger(__name__)
 class ProviderViewSet(viewsets.ModelViewSet):
     """
     Viewset for CRUD operations on the providers
+    
+    list: Retrieves a list of providers
+    create: Creates a new provider
+    retrieve: Retrieves an specific provider
+    delete: Deletes an specific provider
+    partial_update: Allows to update a provider partially
+    update: Allows to update a provider completely
     """
     serializer_class = ProviderSerializer
     queryset = Provider.objects.all()
@@ -21,7 +28,18 @@ class ProviderViewSet(viewsets.ModelViewSet):
 
 class ServiceAreaViewSet(viewsets.ModelViewSet):
     """
-    Viewset for CRUD operations on the providers
+    Viewset for CRUD operations on services areas for the given provider
+    
+    list: Retrieves the list of service areas for the given provider id (provider_pk)
+    
+    create:
+    Creates a service area for for the given provider.
+    The area is a geometrical polygon that can be set using the formats: GeoJSON, WKT EWKT or HEXEWKB.
+
+    retrieve: Retrieves an specific service area from the given provider id (provider_pk)
+    delete: Deletes an specific service area from the given provider id (provider_pk)
+    partial_update: Allows to update a service area partially in he given provider id (provider_pk)
+    update: Allows to update a service area completely in he given provider id (provider_pk)
     """
     serializer_class = ServiceAreaSerializer
 
@@ -35,7 +53,11 @@ class ServiceAreaViewSet(viewsets.ModelViewSet):
 @api_view(['GET'])
 def search_service_areas(request):
     """
-    Endpoint to search for the service areas than contains a geometrical point (lat, lon)
+    Search
+    Search endpoint for the service areas than contains a geometrical point (lat,lon).
+    The geometrical point must be added to the request as a queryparam named location with the form (lat,lon)
+    
+    (e.g service-areas?location=100,32.2)
     """
     location = request.query_params.get('location')
     if location:
